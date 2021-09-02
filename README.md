@@ -28,4 +28,4 @@ Options
 4. Delete Time
 5. Start Timer
 
-![Main Menu](https://github.com/willmcgugan/rich/raw/master/images/screen1.png)
+![Main Menu](https://raw.githubusercontent.com/null011/ClockiPy/master/images/screen1.png)
