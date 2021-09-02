@@ -6,8 +6,10 @@ Click on `Profile Settings` -> `API`
 
 ### Install
 
+Python3 is required
+
 ```
-pip install Clockipy
+pip3 install Clockipy
 
 ```
 
