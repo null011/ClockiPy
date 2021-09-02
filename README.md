@@ -7,7 +7,8 @@ Click on `Profile Settings` -> `API`
 ### Install
 
 ```
-pip install clokipy
+pip install Clockipy
+
 ```
 
 ### Usage
@@ -15,7 +16,8 @@ pip install clokipy
 Enter your API Key
 
 ```
-clokipy
+clockipy
+
 API KEY (q To Quit):
 
 ```
