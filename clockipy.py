@@ -6,7 +6,7 @@ import asyncio
 from urllib.parse import urljoin
 from typing import Dict, List, Optional
 from pydantic import BaseModel
-from rich import print
+from rich import print, text
 from rich import console
 from rich.table import Table
 from rich.console import Console
@@ -527,6 +527,10 @@ async def userInfo(cache: Dict, apikey: str):
     )
 
     res = await Get(url=api_url, request_title="Fetching User Info", multiple=True, apikey=apikey)
+
+    if res.status_code != 200:
+        print("\nInvalid API Key", res.text)
+        sys.exit()
 
     data = res.json()
 
