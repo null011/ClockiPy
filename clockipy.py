@@ -6,7 +6,7 @@ import asyncio
 from urllib.parse import urljoin
 from typing import Dict, List, Optional
 from pydantic import BaseModel
-from rich import print, text
+from rich import print
 from rich import console
 from rich.table import Table
 from rich.console import Console
@@ -236,6 +236,33 @@ async def getProjects(cache: Dict, apikey: str):
             }
 
 
+async def showProjects(cache: Dict):
+    projects = cache.get('projects', {})
+
+    HEADERS = [
+        {"text": "ID"},
+        {"text": "Name"},
+    ]
+
+    DATA = []
+
+    for p in projects:
+
+        if len(projects[p]['name']) > 30:
+            project_name = "{} ..".format(
+                projects[p]['name'][:30]
+            )
+        else:
+            project_name = projects[p]['name']
+
+        DATA.append((
+            projects[p]['id'],
+            project_name
+        ))
+
+    console.print(creatTable(headers=HEADERS, data=DATA, title="Projects"))
+
+
 async def showTasks(cache: Dict):
     tasks = cache.get('tasks', {})
 
@@ -263,6 +290,147 @@ async def showTasks(cache: Dict):
         ))
 
     console.print(creatTable(headers=HEADERS, data=DATA, title="Tasks"))
+
+
+async def showMyTasks(cache: Dict):
+    tasks = cache.get('mytask', {})
+
+    HEADERS = [
+        {"text": "Task ID"},
+        {"text": "Project Name"},
+        {"text": "Name"}
+    ]
+
+    DATA = []
+
+    for p in tasks:
+
+        if len(tasks[p]['name']) > 30:
+            task_name = "{} ..".format(
+                tasks[p]['name'][:30]
+            )
+        else:
+            task_name = tasks[p]['name']
+
+        DATA.append((
+            tasks[p]['id'],
+            tasks[p]['project_name'],
+            task_name
+        ))
+
+    console.print(creatTable(headers=HEADERS, data=DATA, title="My Tasks"))
+
+
+async def addToMyTasks(cache: Dict):
+
+    mytask = cache.setdefault('mytask', {})
+    tasks = cache.get('tasks', {})
+
+    await showTasks(cache=cache)
+
+    print("\n:heavy_plus_sign: Add To MyTask")
+
+    while True:
+
+        taskid = console.input("\nTaskid: ").strip()
+
+        if taskid.lower() == 'q':
+            return
+
+        task = tasks.get(taskid, {})
+
+        if not task:
+            continue
+
+        mytask[taskid] = task
+
+        addmore = console.input("Add More? (y/n): ").strip().lower()
+
+        if addmore == 'n':
+            await wrtieCacheToDisk(cache=cache, apikey=None, init=False)
+            break
+
+
+async def removeMyTasks(cache: Dict):
+
+    mytask = cache.get('mytask', {})
+
+    if not mytask:
+        return
+
+    await showMyTasks(cache=cache)
+
+    print("\n:x: Remove Task")
+
+    while True:
+        taskid = console.input("\nTaskid: ").strip().lower()
+
+        if taskid == 'q':
+            return
+
+        if taskid == 'done':
+            await wrtieCacheToDisk(cache=cache, apikey=None, init=False)
+            break
+
+        try:
+            mytask.pop(taskid)
+        except Exception as e:
+            print(":x: Error failed to remove task")
+            continue
+
+        addmore = console.input("Add More? (y/n): ").strip().lower()
+
+        if addmore == 'n':
+            await wrtieCacheToDisk(cache=cache, apikey=None, init=False)
+            break
+
+
+async def myTaks(cache: Dict):
+
+    mytask = cache.get('mytask', {})
+
+    MY_TASKS_HEADERS = [
+        {"text": "Option"},
+        {"text": "Name"},
+    ]
+
+    MY_TASKS_OPTIONS = [
+        ("1", ":memo: Show Tasks"),
+        ("2", ":ledger: Show My Task"),
+        ("3", ":heavy_plus_sign: Add Task"),
+        ("4", ":x: Remove Task"),
+        ("5", ":house: Default Task"),
+        ("0", ":memo: Show My Task Menu"),
+        ("Q/q", ":v: Exit Submenu")
+    ]
+
+    table = creatTable(headers=MY_TASKS_HEADERS,
+                       data=MY_TASKS_OPTIONS, title="Manage My Tasks")
+
+    print(table)
+
+    while True:
+        option = console.input("\n:id: Select Option (mytask): ")
+        print()
+
+        if option.lower() == "q":
+            break
+
+        if option == '1':
+            await showTasks(cache=cache)
+            continue
+        if option == '2':
+            await showMyTasks(cache=cache)
+            continue
+        if option == "3":
+            await addToMyTasks(cache=cache)
+            continue
+        if option == "4":
+            await removeMyTasks(cache=cache)
+            continue
+        if option == "0":
+            print(table)
+            continue
 
 
 async def timeEntryCurrent(cache: Dict, apikey: str):
@@ -319,9 +487,13 @@ async def timeEntryCurrent(cache: Dict, apikey: str):
 async def createTime(cache: Dict, apikey: str):
 
     tasks: Dict = cache.get("tasks", {})
+    mytask: Dict = cache.get("tasks", {})
     user: Dict = cache.get('user', {})
 
-    await showTasks(cache=cache)
+    if mytask:
+        await showMyTasks(cache=cache)
+    else:
+        await showTasks(cache=cache)
 
     while True:
 
@@ -517,6 +689,60 @@ async def deleteTime(cache: Dict, apikey: str):
             break
 
 
+def processUserList(user: List[Dict]):
+
+    users = []
+
+    for u in user:
+
+        status = ":white_check_mark:" if u['status'] == 'ACTIVE' else ":no_entry_sign:"
+
+        settings: Dict = u.get("settings", {})
+
+        if not settings:
+            settings = {}
+
+        users.append((
+            u['email'],
+            u['name'],
+            status,
+            settings.get("timeZone", "N/A")
+        ))
+
+    return users
+
+
+async def listUers(cache: Dict, apikey: str):
+
+    user = cache.setdefault('user', {})
+
+    api_url = urljoin(
+        BASE_API_URL,
+        "workspaces/{workspace_id}/users".format(
+            **user
+        )
+    )
+
+    response = await Get(url=api_url, apikey=apikey, request_title="Fetching Users")
+
+    if response.status_code != 200:
+        print(":x: Failed to get users")
+        return
+
+    TABLE_DATA = processUserList(response.json())
+
+    TABLE_HEADERS = [
+        {"text": ":e-mail: Email"},
+        {"text": ":bust_in_silhouette: Name"},
+        {"text": "Status"},
+        {"text": ":clock10: Timezone"}
+    ]
+
+    table = creatTable(headers=TABLE_HEADERS, data=TABLE_DATA, title="Users")
+
+    print(table)
+
+
 async def userInfo(cache: Dict, apikey: str):
 
     user = cache.setdefault('user', {})
@@ -535,14 +761,17 @@ async def userInfo(cache: Dict, apikey: str):
     data = res.json()
 
     user['id'] = data['id']
+    user['email'] = data['email']
+    user['name'] = data['name']
     user['workspace_id'] = data['activeWorkspace']
     user['tz'] = data['settings']['timeZone']
 
 
-async def wrtieCacheToDisk(cache: Dict, apikey: str):
+async def wrtieCacheToDisk(cache: Dict, apikey: str, init: bool = True):
 
-    await userInfo(cache=cache, apikey=apikey)
-    await getProjects(cache=cache, apikey=apikey)
+    if init is True:
+        await userInfo(cache=cache, apikey=apikey)
+        await getProjects(cache=cache, apikey=apikey)
 
     with open(os.path.join(CONFIG_DIR, 'cache.json'), 'w') as f:
         f.write(json.dumps(cache))
@@ -604,29 +833,40 @@ async def loadAPIKey():
 
 
 async def menu(cache: Dict, apikey: str):
+
+    user = cache.get('user', {})
+
     HEADERS = [
         {"text": "Option"},
         {"text": "Description"},
     ]
 
     DATA = [
-        ("1", ":house: List Projects"),
+        ("1", ":house: List Tasks"),
         ("2", ":ledger: Show Time Entries"),
         ("3", ":watch: Add Time"),
         ("4", ":skull: Delete Time"),
         ("5", ":clock1: Start Timer"),
+        ("6", ":clipboard: List Projects"),
+        ("7", ":busts_in_silhouette: List Users"),
+        ("8", ":house: Manage My Tasks"),
         ("0", ":memo: Show Menu"),
+        ("00", ":floppy_disk: Update Cache File"),
         ("clear", ":computer: Clear Screen"),
         ("Q/q", ":v: Quit")
     ]
 
     table = creatTable(data=DATA, headers=HEADERS,
-                       title=":clock9: ClokiPy Menu :clock10:")
+                       title=":clock9: ClockiPy Menu :clock10:")
+
+    print("\n:wave::wave: Welcome! :bust_in_silhouette: {}\n".format(
+        user.get('name', 'N/A')))
 
     console.print(table)
 
     while True:
         action = console.input("\n:id: Select Menu Option: ")
+        print()
 
         if action == 'q' or action == 'Q':
             break
@@ -645,11 +885,23 @@ async def menu(cache: Dict, apikey: str):
         elif action == '5':
             await startTimer(cache=cache, apikey=apikey)
             continue
+        elif action == '6':
+            await showProjects(cache=cache)
+            continue
+        elif action == '7':
+            await listUers(cache=cache, apikey=apikey)
+            continue
+        elif action == '8':
+            await myTaks(cache=cache)
+            continue
         elif action == 'clear':
             system('clear')
             continue
         elif action == '0':
             print(table)
+            continue
+        elif action == '00':
+            await wrtieCacheToDisk(cache=cache, apikey=apikey)
             continue
 
 
